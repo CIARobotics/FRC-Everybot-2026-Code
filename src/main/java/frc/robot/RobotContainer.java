@@ -5,6 +5,9 @@
 package frc.robot;
 
 import edu.wpi.first.wpilibj.smartdashboard.SendableChooser;
+import edu.wpi.first.wpilibj.shuffleboard.Shuffleboard;
+import edu.wpi.first.networktables.GenericEntry;
+import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj2.command.Command;
 import edu.wpi.first.wpilibj2.command.button.CommandXboxController;
 import edu.wpi.first.wpilibj2.command.button.Trigger;
@@ -14,7 +17,7 @@ import frc.robot.commands.ClimbDown;
 import frc.robot.commands.ClimbUp;
 import frc.robot.commands.Drive;
 import frc.robot.commands.Eject;
-import frc.robot.commands.ExampleAuto;
+import frc.robot.commands.DriveShootThenClimb;
 import frc.robot.commands.Intake;
 import frc.robot.commands.LaunchSequence;
 import frc.robot.subsystems.CANDriveSubsystem;
@@ -44,17 +47,49 @@ public class RobotContainer {
 
   // The autonomous chooser
   private final SendableChooser<Command> autoChooser = new SendableChooser<>();
+  // Shuffleboard entry to enable/disable operator controls at runtime
+  private final GenericEntry operatorControlsEnabledEntry;
 
   /**
    * The container for the robot. Contains subsystems, OI devices, and commands.
    */
   public RobotContainer() {
-    configureBindings();
+  // Create Shuffleboard widgets for controller mappings and operator control toggle
+  Shuffleboard.getTab("Operator")
+    .add("Controller Mappings",
+      "Driver: Left/Right sticks = drive\nOperator: LB=intake, RB=launch, A=eject, DPadUp=climb up, DPadDown=climb down")
+    .withSize(6, 2);
+
+  operatorControlsEnabledEntry = Shuffleboard.getTab("Operator")
+    .add("Operator Controls Active", true)
+    .withPosition(0, 2)
+    .withSize(2, 1)
+    .getEntry();
+
+  // Put a mirror value on SmartDashboard too (some existing code reads SmartDashboard)
+    
+  configureBindings();
 
     // Set the options to show up in the Dashboard for selecting auto modes. If you
     // add additional auto modes you can add additional lines here with
     // autoChooser.addOption
-    autoChooser.setDefaultOption("Autonomous", new ExampleAuto(driveSubsystem, fuelSubsystem));
+  autoChooser.setDefaultOption("DriveShootThenClimb (Climb+Drive+Shoot)", new DriveShootThenClimb(driveSubsystem, fuelSubsystem, climberSubsystem));
+  // Add additional autonomous modes
+  autoChooser.addOption("DriveOnly (4s)", new frc.robot.commands.DriveOnly(driveSubsystem));
+  autoChooser.addOption("DriveThenShoot (Drive->4s Launch->2s Intake->3s Launch)", new frc.robot.commands.DriveThenShoot(driveSubsystem, fuelSubsystem));
+
+  // Shuffleboard entries for autonomous debugging
+  // Add the SendableChooser so you can pick the autonomous from Shuffleboard/Driver Station
+  Shuffleboard.getTab("Autonomous").add("Auto Chooser", autoChooser).withSize(2,2).withPosition(0,0);
+  Shuffleboard.getTab("Autonomous").add("Auto Step", "Idle").withSize(3,1).withPosition(2,0);
+  Shuffleboard.getTab("Autonomous").add("Auto Step Duration", 0).withSize(2,1).withPosition(2,1);
+  Shuffleboard.getTab("Autonomous").add("Auto Time Remaining", 0).withSize(2,1).withPosition(4,1);
+
+  // Telemetry tab: mirror some SmartDashboard entries here for easy viewing
+  Shuffleboard.getTab("Telemetry").add("Intaking feeder roller value", SmartDashboard.getNumber("Intaking feeder roller value", 0)).withSize(2,1).withPosition(0,0);
+  Shuffleboard.getTab("Telemetry").add("Intaking intake roller value", SmartDashboard.getNumber("Intaking intake roller value", 0)).withSize(2,1).withPosition(2,0);
+  Shuffleboard.getTab("Telemetry").add("Launching feeder roller value", SmartDashboard.getNumber("Launching feeder roller value", 0)).withSize(2,1).withPosition(0,1);
+  Shuffleboard.getTab("Telemetry").add("Launching launcher roller value", SmartDashboard.getNumber("Launching launcher roller value", 0)).withSize(2,1).withPosition(2,1);
   }
 
   /**
@@ -70,18 +105,34 @@ public class RobotContainer {
    */
   private void configureBindings() {
 
-    // While the left bumper on operator controller is held, intake Fuel
-    driverController.leftBumper().whileTrue(new Intake(fuelSubsystem));
-    // While the right bumper on the operator controller is held, spin up for 1
-    // second, then launch fuel. When the button is released, stop.
-    driverController.rightBumper().whileTrue(new LaunchSequence(fuelSubsystem));
-    // While the A button is held on the operator controller, eject fuel back out
-    // the intake
-    driverController.a().whileTrue(new Eject(fuelSubsystem));
-   // While the down arrow on the directional pad is held it will unclimb the robot
-    driverController.povDown().whileTrue(new ClimbDown(climberSubsystem));
-    // While the up arrow on the directional pad is held it will cimb the robot
-    driverController.povUp().whileTrue(new ClimbUp(climberSubsystem));
+    // Decide whether operator controller (co-driver) handles the controls or the driver
+    boolean operatorActive = true;
+    if (operatorControlsEnabledEntry != null) {
+      operatorActive = operatorControlsEnabledEntry.getBoolean(true);
+    }
+    // Mirror on SmartDashboard for compatibility with existing code/UI
+    SmartDashboard.putBoolean("Operator Controls Active", operatorActive);
+
+    // While the left bumper is held, intake Fuel
+    if (operatorActive) {
+      operatorController.leftBumper().whileTrue(new Intake(fuelSubsystem));
+      // While the right bumper on the operator controller is held, spin up for 1
+      // second, then launch fuel. When the button is released, stop.
+      operatorController.rightBumper().whileTrue(new LaunchSequence(fuelSubsystem));
+      // While the A button is held on the operator controller, eject fuel back out
+      // the intake
+      operatorController.a().whileTrue(new Eject(fuelSubsystem));
+      // While the down arrow on the directional pad is held it will unclimb the robot
+      operatorController.povDown().whileTrue(new ClimbDown(climberSubsystem));
+      // While the up arrow on the directional pad is held it will climb the robot
+      operatorController.povUp().whileTrue(new ClimbUp(climberSubsystem));
+    } else {
+      driverController.leftBumper().whileTrue(new Intake(fuelSubsystem));
+      driverController.rightBumper().whileTrue(new LaunchSequence(fuelSubsystem));
+      driverController.a().whileTrue(new Eject(fuelSubsystem));
+      driverController.povDown().whileTrue(new ClimbDown(climberSubsystem));
+      driverController.povUp().whileTrue(new ClimbUp(climberSubsystem));
+    }
 
     // Set the default command for the drive subsystem to the command provided by
     // factory with the values provided by the joystick axes on the driver

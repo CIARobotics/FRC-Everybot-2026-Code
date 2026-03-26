@@ -1,4 +1,4 @@
-// Copyright (c) FIRST and other WPILib contributors.
+// Copyright (c) FIRST and other WPILab contributors.
 // Open Source Software; you can modify and/or share it under the terms of
 // the WPILib BSD license file in the root directory of this project.
 
@@ -16,12 +16,12 @@ import frc.robot.subsystems.CANDriveSubsystem;
 import frc.robot.subsystems.CANFuelSubsystem;
 import frc.robot.subsystems.ClimberSubsystem;
 
-// NOTE:  Consider using this command inline, rather than writing a subclass.  For more
-// information, see:
-// https://docs.wpilib.org/en/stable/docs/software/commandbased/convenience-features.html
-public class ExampleAuto extends SequentialCommandGroup {
-  /** Creates a new ExampleAuto. */
-  public ExampleAuto(CANDriveSubsystem driveSubsystem, CANFuelSubsystem ballSubsystem, ClimberSubsystem climberSubsystem) {
+/**
+ * Autonomous: Climb down while delayed drive, then launch, then climb up.
+ */
+public class DriveShootThenClimb extends SequentialCommandGroup {
+  /** Creates a new DriveShootThenClimb. */
+  public DriveShootThenClimb(CANDriveSubsystem driveSubsystem, CANFuelSubsystem ballSubsystem, ClimberSubsystem climberSubsystem) {
     // Autonomous sequence requested:
     // 1) Run climber down for 6.5 seconds.
     // 2) After 2.5 seconds from start, drive forward for 4 seconds (overlaps with climber down).
@@ -71,5 +71,4 @@ public class ExampleAuto extends SequentialCommandGroup {
         )
     );
   }
-
 }
